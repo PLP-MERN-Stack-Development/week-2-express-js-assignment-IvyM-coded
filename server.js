@@ -12,6 +12,28 @@ const PORT = process.env.PORT || 3000;
 // Middleware setup
 app.use(bodyParser.json());
 
+// --- Custom Middleware ---
+// Request logger
+const requestLogger = (req, res, next) => {
+  const time = new Date().toISOString();
+  console.log(`[${time}] ${req.method} ${req.originalUrl}`);
+  next();
+};
+app.use(requestLogger);
+
+// Authentication middleware
+const authenticate = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const token = authHeader.split(' ')[1];
+  if (token !== '12345') {
+    return res.status(403).json({ error: 'Forbidden: Invalid password' });
+  }
+  next();
+};
+
 // Sample in-memory products database
 let products = [
   {
@@ -45,27 +67,60 @@ app.get('/', (req, res) => {
   res.send('Welcome to the Product API! Go to /api/products to see all products.');
 });
 
-// TODO: Implement the following routes:
 // GET /api/products - Get all products
-// GET /api/products/:id - Get a specific product
-// POST /api/products - Create a new product
-// PUT /api/products/:id - Update a product
-// DELETE /api/products/:id - Delete a product
-
-// Example route implementation for GET /api/products
 app.get('/api/products', (req, res) => {
   res.json(products);
 });
 
-// TODO: Implement custom middleware for:
-// - Request logging
-// - Authentication
-// - Error handling
+// GET /api/products/:id - Get a specific product
+app.get('/api/products/:id', (req, res) => {
+  const product = products.find(p => p.id === req.params.id);
+  if (!product) {
+    return res.status(404).json({ error: 'Product not found' });
+  }
+  res.json(product);
+});
+
+// POST /api/products - Create a new product
+app.post('/api/products', authenticate, (req, res) => {
+  const newProduct = {
+    id: uuidv4(),
+    ...req.body
+  };
+  products.push(newProduct);
+  res.status(201).json(newProduct);
+});
+
+// PUT /api/products/:id - Update a product
+app.put('/api/products/:id', authenticate, (req, res) => {
+  const product = products.find(p => p.id === req.params.id);
+  if (!product) {
+    return res.status(404).json({ error: 'Product not found' });
+  }
+  Object.assign(product, req.body);
+  res.json(product);
+});
+
+// DELETE /api/products/:id - Delete a product
+app.delete('/api/products/:id', authenticate, (req, res) => {
+  const productIndex = products.findIndex(p => p.id === req.params.id);
+  if (productIndex === -1) {
+    return res.status(404).json({ error: 'Product not found' });
+  }
+  products.splice(productIndex, 1);
+  res.status(204).send();
+});
+
+// Global error handler (Optional – to catch unexpected errors)
+app.use((err, req, res, next) => {
+  console.error('Global Error:', err.stack);
+  res.status(500).json({ error: 'Something went wrong' });
+});
 
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
 
-// Export the app for testing purposes
-module.exports = app; 
+// Export for testing
+module.exports = app;
